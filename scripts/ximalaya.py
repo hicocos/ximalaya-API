@@ -4,6 +4,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from http.client import HTTPException
@@ -58,6 +59,24 @@ def positive_timeout(value):
     return parsed
 
 
+def ranking_ids(value):
+    if not re.fullmatch(r"[1-9][0-9]*(?:,[1-9][0-9]*)*", value):
+        raise argparse.ArgumentTypeError("榜单 ID 必须是正整数，多个用英文逗号连接，不含空格")
+    return value
+
+
+def validate_xm_sign(value):
+    if not isinstance(value, str) or len(value) > 16384 or any(ord(x) < 33 or ord(x) > 126 for x in value):
+        raise ApiError("xm-sign 必须是浏览器请求中的单行原始值，不含空格或控制字符")
+    if value.lower().startswith("xm-sign:"):
+        raise ApiError("请去掉 xm-sign: 前缀")
+    return value
+
+
+def read_xm_sign():
+    return validate_xm_sign(os.environ.get("XIMALAYA_XM_SIGN", ""))
+
+
 def read_cookie(path=None):
     """文件优先于环境变量；绝不在错误中回显内容。"""
     if path:
@@ -77,12 +96,13 @@ def read_cookie(path=None):
 
 
 class Client:
-    def __init__(self, cookie="", timeout=20, opener=None):
+    def __init__(self, cookie="", timeout=20, opener=None, xm_sign=""):
         self.cookie = cookie
         self.timeout = timeout
         self.opener = opener or build_opener(NoRedirect())
+        self.xm_sign = xm_sign
 
-    def get(self, base, path, params=None):
+    def get(self, base, path, params=None, xm_sign=""):
         if base not in (WEB, MOBILE, MOBILE_API) or not path.startswith("/"):
             raise ApiError("不允许的接口地址")
         headers = {
@@ -92,6 +112,10 @@ class Client:
         }
         if self.cookie:
             headers["Cookie"] = self.cookie
+        if xm_sign:
+            if base != WEB or path != "/revision/rank/v4/element":
+                raise ApiError("xm-sign 只允许用于官网榜单内容接口")
+            headers["xm-sign"] = validate_xm_sign(xm_sign)
         url = base + path + ("?" + urlencode(params) if params else "")
         req = Request(url, headers=headers, method="GET")
         try:
@@ -170,6 +194,21 @@ class Client:
 
     def rank_tabs(self, scene_id=1):
         return self.get(WEB, "/revision/rank/v4/rankTabs", {"sceneId": scene_id})
+
+    def rank(self, rank_ids, limit=None):
+        if not self.xm_sign:
+            raise ApiError("榜单内容需要官网浏览器正常生成的 xm-sign；请设置 XIMALAYA_XM_SIGN，不是登录 Cookie")
+        try:
+            ranking_ids(rank_ids)
+        except (argparse.ArgumentTypeError, TypeError):
+            raise ApiError("榜单 ID 格式错误") from None
+        params = {"rankingId": rank_ids}
+        if limit is not None:
+            if type(limit) is not int or not 1 <= limit <= 100:
+                raise ApiError("榜单条数必须在 1 到 100 之间")
+            # 虽然上游名叫 pageNum，本次实测为前 N 条，而不是页码。
+            params["pageNum"] = limit
+        return self.get(WEB, "/revision/rank/v4/element", params, xm_sign=self.xm_sign)
 
     def album_rating(self, album_id):
         return self.get(WEB, f"/revision/comment/albumStatistics/{album_id}")
@@ -277,6 +316,15 @@ def summary(command, body):
         return {"items": [pick(x, ["id", "title", "intro", "nickname", "coverPath", "link", "playCount", "trackCount", "isPaid"]) for x in list_at(body, "data", "hotWordAlbums")]}
     if command == "rank-tabs":
         return {**pick(object_at(body, "data"), ["sceneId"]), "items": [pick(x, ["id", "name", "tabWraps"]) for x in list_at(body, "data", "tabLists")]}
+    if command == "rank":
+        ranks = []
+        for rank in list_at(body, "data", "rankList"):
+            ranks.append({
+                **pick(rank, ["rankId", "title", "subtitle", "contentType", "count", "coverPath"]),
+                "albums": [pick(x, ["id", "albumTitle", "albumUrl", "cover", "anchorName", "anchorUrl", "playCount", "trackCount", "description", "isPaid", "categoryId", "categoryTitle", "lastUpdateTrack", "lastUpdateTrackUri", "rankingPositionChange"]) for x in list_at(rank, "albums")],
+                "anchors": [pick(x, ["id", "anchorName", "anchorUrl", "cover", "trackCount", "albumCount", "fansCount", "personalDescription", "rankingPositionChange"]) for x in list_at(rank, "anchors")],
+            })
+        return {"items": ranks}
     if command == "album-rating":
         return pick(object_at(body, "data"), ["isAlbumCommentShow", "albumScore", "totalCommentCount"])
     if command == "album-reviews":
@@ -401,6 +449,9 @@ def parser():
     comments.add_argument("--rows", type=bounded_positive_int, default=5)
     rank_tabs = commands.add_parser("rank-tabs", help="榜单目录（不代表已取得榜单作品）")
     rank_tabs.add_argument("--scene", type=positive_int, default=1)
+    rank = commands.add_parser("rank", help="榜单内容；需要本机 XIMALAYA_XM_SIGN，非登录 Cookie")
+    rank.add_argument("ranking_ids", type=ranking_ids, help="从 rank-tabs 读取；多个用英文逗号连接")
+    rank.add_argument("--limit", type=bounded_positive_int, help="只取前 N 条；不传时使用服务端默认，不是分页")
     album_rating = commands.add_parser("album-rating", help="作品评分和评价显示开关")
     album_rating.add_argument("album_id", type=positive_int)
     album_reviews = commands.add_parser("album-reviews", help="作品最热或最新评价")
@@ -423,7 +474,8 @@ def main(argv=None):
         cookie = read_cookie(args.cookie_file)
         if args.command == "login-status" and not cookie:
             raise ApiError("请先通过环境变量或文件提供 Cookie")
-        client = Client(cookie, args.timeout)
+        sign = read_xm_sign() if args.command == "rank" else ""
+        client = Client(cookie, args.timeout, xm_sign=sign)
         if args.command == "search":
             body = client.search(args.keyword, args.core, args.page, args.rows, args.condition)
         elif args.command == "album":
@@ -456,6 +508,8 @@ def main(argv=None):
             body = client.comments(args.track_id, args.page, args.rows)
         elif args.command == "rank-tabs":
             body = client.rank_tabs(args.scene)
+        elif args.command == "rank":
+            body = client.rank(args.ranking_ids, args.limit)
         elif args.command == "album-rating":
             body = client.album_rating(args.album_id)
         elif args.command == "album-reviews":

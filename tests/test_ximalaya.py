@@ -418,6 +418,96 @@ class CliTests(unittest.TestCase):
         self.assertEqual([x["id"] for x in json.loads(out.getvalue())["result"]["items"]], [2])
 
 
+class RankTests(unittest.TestCase):
+    def test_ranking_id_format_preserved(self):
+        self.assertEqual(xm.ranking_ids("100006,100149"), "100006,100149")
+        for value in ("0", "-1", "01", "100006, 100149", "100006,", "100006&x=y", "abc"):
+            with self.subTest(value=value), self.assertRaises(argparse.ArgumentTypeError):
+                xm.ranking_ids(value)
+
+    @patch.dict(os.environ, {"XIMALAYA_XM_SIGN": "synthetic-browser&&synthetic-session"})
+    def test_sign_read_unchanged(self):
+        self.assertEqual(xm.read_xm_sign(), "synthetic-browser&&synthetic-session")
+
+    def test_sign_control_characters_redacted(self):
+        for value in ("synthetic-secret\nvalue", " synthetic-secret", "xm-sign:synthetic-secret", "合成非ASCII", "s" * 16385):
+            with self.subTest(value=value[:20]), patch.dict(os.environ, {"XIMALAYA_XM_SIGN": value}), self.assertRaises(xm.ApiError) as err:
+                xm.read_xm_sign()
+            self.assertNotIn("synthetic-secret", str(err.exception))
+
+    def test_rank_no_sign_no_request(self):
+        opener = Opener()
+        with self.assertRaisesRegex(xm.ApiError, "XIMALAYA_XM_SIGN"):
+            xm.Client(opener=opener).rank("100006")
+        self.assertEqual(opener.requests, [])
+
+    def test_direct_invalid_sign_no_request(self):
+        for value in (123, "synthetic\r\ninjected", " synthetic"):
+            opener = Opener()
+            with self.subTest(value=value), self.assertRaises(xm.ApiError):
+                xm.Client(opener=opener, xm_sign=value).rank("100006")
+            self.assertEqual(opener.requests, [])
+
+    def test_rank_default_omits_misleading_page_num(self):
+        opener = Opener(Response({"ret": 200}))
+        xm.Client(opener=opener, xm_sign="synthetic-sign").rank("100006")
+        request = opener.requests[0][0]
+        self.assertEqual(request.full_url, xm.WEB + "/revision/rank/v4/element?rankingId=100006")
+        self.assertEqual(request.get_header("Xm-sign"), "synthetic-sign")
+        self.assertIsNone(request.get_header("Cookie"))
+
+    def test_limit_encodes_top_n_not_page(self):
+        opener = Opener(Response({"ret": 200}))
+        xm.Client(opener=opener, xm_sign="synthetic-sign").rank("100006,100149", 3)
+        self.assertTrue(opener.requests[0][0].full_url.endswith("rankingId=100006%2C100149&pageNum=3"))
+
+    def test_invalid_direct_limit(self):
+        for limit in (0, -1, 101, True, "3"):
+            opener = Opener()
+            with self.subTest(limit=limit), self.assertRaises(xm.ApiError):
+                xm.Client(opener=opener, xm_sign="synthetic").rank("100006", limit)
+            self.assertEqual(opener.requests, [])
+
+    def test_sign_not_forwarded_to_other_api(self):
+        opener = Opener(Response({"ret": 200}))
+        client = xm.Client(opener=opener, xm_sign="synthetic")
+        client.album(1)
+        self.assertIsNone(opener.requests[0][0].get_header("Xm-sign"))
+        with self.assertRaises(xm.ApiError):
+            client.get(xm.MOBILE, "/test", xm_sign="synthetic")
+
+    def test_rank_error_is_not_empty_success(self):
+        opener = Opener(Response({"ret": 400, "msg": "synthetic-sign"}))
+        with self.assertRaises(xm.ApiError) as err:
+            xm.Client(opener=opener, xm_sign="synthetic-sign").rank("100006")
+        self.assertNotIn("synthetic-sign", str(err.exception))
+
+    def test_album_and_anchor_ranks_whitelist(self):
+        body = {"data": {"currentUid": 123, "rankList": [
+            {"rankId": 1, "contentType": 2, "count": 1, "albums": [{"id": 11, "albumTitle": "合成作品", "isSubscribe": True}], "anchors": []},
+            {"rankId": 2, "contentType": 3, "count": 1, "albums": [], "anchors": [{"id": 22, "anchorName": "合成主播", "isFollow": True}]},
+        ]}}
+        result = xm.summary("rank", body)
+        self.assertEqual(result["items"][0]["albums"][0]["id"], 11)
+        self.assertEqual(result["items"][1]["anchors"][0]["id"], 22)
+        for name in ("currentUid", "isSubscribe", "isFollow"):
+            self.assertNotIn(name, json.dumps(result))
+
+    def test_rank_parser(self):
+        args = xm.parser().parse_args(["rank", "100006,100149", "--limit", "3"])
+        self.assertEqual(args.ranking_ids, "100006,100149")
+        self.assertEqual(args.limit, 3)
+        self.assertIsNone(xm.parser().parse_args(["rank", "100006"]).limit)
+
+    @patch.dict(os.environ, {"XIMALAYA_XM_SIGN": "synthetic-sign"})
+    def test_main_rank(self):
+        body = {"ret": 200, "data": {"rankList": [{"rankId": 1, "albums": [], "anchors": []}]}}
+        with patch.object(xm.Client, "rank", return_value=body) as mocked, contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(xm.main(["rank", "100006", "--limit", "3"]), 0)
+        mocked.assert_called_once_with("100006", 3)
+        self.assertNotIn("synthetic-sign", out.getvalue())
+
+
 class DocumentationTests(unittest.TestCase):
     def test_json_examples_are_valid(self):
         root = Path(__file__).resolve().parents[1]

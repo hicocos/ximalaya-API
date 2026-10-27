@@ -8,6 +8,7 @@
 
 | 页面/操作 | 优先接口 | 用途 |
 | --- | --- | --- |
+| 榜单发现 | `/revision/rank/v4/rankTabs` + `/revision/rank/v4/element` | 目录与作品/主播榜单；内容需官网正常生成的 `xm-sign`，`pageNum` 本次表示前 N 条而非页码，见[榜单说明](Rank_API.md)。 |
 | 搜索作品、作品卡片 | `/revision/search?core=album` | 标题、封面、主播、集数、播放量、付费属性。 |
 | 打开作品详情 | `/revision/album?albumId=...` | 一次取得作品介绍、主播资料和首批目录。 |
 | 较轻量的作品简介 | `/revision/album/v1/simple?albumId=...` | 不需要首批目录和完整主播模块时使用。 |
