@@ -1,0 +1,26 @@
+# Local credentials and account data
+.env
+.env.*
+!.env.example
+*cookie*
+*Cookie*
+*COOKIE*
+*session*.json
+*credential*
+private/
+
+# Local verification output
+verification*.json
+reports/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/

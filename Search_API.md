@@ -1,219 +1,126 @@
-# 喜马拉雅搜索API
+# 搜索 API
 
-## API概述
+[返回首页](README.md) · 最近核验：2026-10-27
 
-喜马拉雅搜索API提供了对喜马拉雅音频内容的搜索功能。用户可以通过指定关键词、搜索范围等条件来查询符合要求的音频。
+## 结论
 
-## API请求
+`GET https://www.ximalaya.com/revision/search` 仍可使用。已验证不带 Cookie 的专辑、声音、主播搜索，以及分页、相关度和时间排序。它不是官方承诺稳定的开放 API。
 
-- 请求URL：https://www.ximalaya.com/revision/search
-- 请求方法：GET
-- 请求参数：
+## 请求参数
 
-| 参数名       | 类型   | 是否必填 | 说明                                   |
-| ------------ | ------ | -------- | -------------------------------------- |
-| core         | 字符串 | 是       | 搜索的资源类型。album-专辑，track-声音 |
-| kw           | 字符串 | 是       | 搜索的关键词                           |
-| page         | 整数   | 否       | 搜索结果的页数，每页20个               |
-| spellchecker | 布尔值 | 否       | 是否开启拼写纠错                       |
-| rows         | 整数   | 否       | 每页的结果数量，默认20                 |
-| condition    | 字符串 | 否       | 搜索条件。relation-相关度，time-最新   |
-| device       | 字符串 | 否       | 设备类型。iPhone、android、pc、web等   |
-| fq           | 字符串 | 否       | 过滤器，根据某个字段的值进行过滤       |
+| 参数 | 说明 |
+| --- | --- |
+| `core` | `album` 专辑、`track` 声音、`user` 主播，三种均已验证。 |
+| `kw` | 搜索词；使用 URL 编码，不要直接拼接带 `&` 等符号的词。 |
+| `page` | 从 `1` 开始的页码。 |
+| `rows` | 每页数量；已验证 `3`、`5`。显式传入，不依赖默认值；最大值未核实。 |
+| `condition` | 专辑搜索已验证 `relation`（相关度）、`time`（时间）。不保证对主播等其他类型同样有效。 |
 
-- 请求示例：[https://www.ximalaya.com/revision/search?core=album&kw=%E7%BC%96%E7%A8%8B&page=1&spellchecker=true&rows=20&condition=relation&device=iPhone](https://www.ximalaya.com/revision/search?core=album&kw=编程&page=1&spellchecker=true&rows=20&condition=relation&device=iPhone)
+历史文档中的 `spellchecker`、`device` 在旧示例里被接受，但本次未证实它们的实际作用，不是成功请求的必要条件。`fq` 的过滤语法和效果未核实，不再作为已支持能力介绍。
 
-## API响应
+```bash
+curl --get 'https://www.ximalaya.com/revision/search' \
+  --data-urlencode 'core=album' \
+  --data-urlencode 'kw=编程' \
+  --data-urlencode 'page=1' \
+  --data-urlencode 'rows=5' \
+  --data-urlencode 'condition=relation' \
+  -H 'Referer: https://www.ximalaya.com/' \
+  -H 'User-Agent: Mozilla/5.0' \
+  --connect-timeout 8 --max-time 25
+```
 
-- 响应数据格式：JSON
-- 响应参数：
+使用验证工具：
 
-| 参数名                    | 类型   | 说明                                            |
-| ------------------------- | ------ | ----------------------------------------------- |
-| ret                       | 整数   | 响应结果码。200表示请求成功，其他值表示请求失败 |
-| msg                       | 字符串 | 响应结果描述信息                                |
-| data.result.response.docs | array  | 搜索结果。每个元素表示一个搜索结果              |
-| play                      | 整数   | 播放次数                                        |
-| user_source               | 字符串 | 用户来源                                        |
-| cover_path                | 字符串 | 封面图片URL                                     |
-| title                     | 字符串 | 标题                                            |
-| uid                       | 整数   | 用户ID                                          |
-| url                       | 字符串 | 详情页链接                                      |
-| pinyin                    | 字符串 | 标题的拼音                                      |
-| category_id               | 整数   | 分类ID                                          |
-| intro                     | 字符串 | 简介                                            |
-| id                        | 整数   | ID                                              |
-| is_paid                   | 布尔值 | 是否付费                                        |
-| is_finished               | 整数   | 专辑状态。1表示已完结，0表示未完结              |
-| tags                      | 字符串 | 标签                                            |
-| category_title            | 字符串 | 分类标题                                        |
-| isDraft                   | 布尔值 | 是否为草稿                                      |
-| created_at                | 整数   | 创建时间                                        |
-| type                      | 字符串 | 资源类型。1表示专辑，2表示声音                  |
-| last_uptrack_at_hour      | 整数   | 最后一次更新的时间戳                            |
-| is_v                      | 布尔值 | 是否为认证用户                                  |
-| refund_support_type       | 整数   | 退款支持类型                                    |
-| count_comment             | 整数   | 评论数                                          |
-| score                     | 浮点数 | 评分                                            |
-| price_type_id             | 整数   | 价格类型ID                                      |
-| updated_at                | 整数   | 更新时间                                        |
-| isVipFree                 | 布尔值 | 是否为VIP免费                                   |
-| nickname                  | 字符串 | 用户昵称                                        |
-| custom_title              | 字符串 | 用户自定义标题                                  |
-| verify_type               | 整数   | 用户认证类型                                    |
-| vipFreeType               | 整数   | 搜索结果中专辑VIP免费类型                       |
-| serialState               | 整数   | 搜索结果中专辑是否为连载中的状态                |
-| price_type_enum           | 整数   | 搜索结果中专辑价格类型的枚举值                  |
-| tracks                    | 整数   | 搜索结果中专辑的集数                            |
-| isNoCopyright             | 布尔型 | 搜索结果中专辑是否为无版权内容                  |
-| comments_count            | 整数   | 搜索结果中专辑的评论数量                        |
-| price_types               | 数组   | 搜索结果中专辑的价格类型                        |
-| anchorUrl                 | 字符串 | 搜索结果中用户的主播主页地址                    |
-| richTitle                 | 字符串 | 搜索结果中专辑的富文本标题                      |
-| vipType                   | 整数   | 搜索结果中专辑的VIP类型                         |
-| numFound                  | 整数   | 搜索结果的总数量                                |
-| start                     | 整数   | 当前结果的起始位置                              |
-| totalPage                 | 整数   | 搜索结果的总页数                                |
+```bash
+python3 scripts/ximalaya.py search '编程' --rows 5
+python3 scripts/ximalaya.py search '编程' --core track --rows 3
+python3 scripts/ximalaya.py search '编程' --core user --rows 3
+python3 scripts/ximalaya.py search '编程' --page 2 --rows 3
+python3 scripts/ximalaya.py search '编程' --condition time --rows 3
+```
 
-下面是 `responseHeader` 的参数说明：
+## 响应结构
 
-| 参数名称 | 数据类型 | 说明                                                         |
-| -------- | -------- | ------------------------------------------------------------ |
-| QTime    | 整数     | 查询花费时间，单位为毫秒。                                   |
-| params   | object   | 包含在请求中的所有参数，包括 core、defType、indent、qf、start、sort、rows、wt。 |
-| status   | 整数     | 查询的状态，0表示成功，非0表示出错。                         |
+- Web 接口业务成功码为 `ret=200`，与移动接口的 `ret=0` 不同。
+- 结果列表：`data.result.response.docs`。
+- 分页字段位于 `data.result.response`，不在顶层。
+- 即使响应头是 `text/plain`，响应体也可能是合法 JSON；不要只按 Content-Type 决定是否解析。
 
-`params`字段表示请求参数信息，它包含了客户端在请求中设置的各种参数的名称和值。以下是params字段中包含的各个参数的具体含义：
-
-| 参数名  | 类型   | 描述                 |
-| ------- | ------ | -------------------- |
-| core    | 字符串 | 搜索的索引类型。     |
-| defType | 字符串 | 查询解析器类型。     |
-| indent  | 字符串 | 是否缩进输出。       |
-| qf      | 字符串 | 查询字段及其权重。   |
-| start   | 字符串 | 结果的起始位置。     |
-| sort    | 字符串 | 结果的排序方式。     |
-| rows    | 字符串 | 每页返回的结果数量。 |
-| wt      | 字符串 | 返回结果的格式。     |
-
-### 返回值说明
-
-#### 请求成功返回示例
+以下来自实际响应，删去了其他字段和条目；`pageSize` 表示服务端页大小，不是这个节选中 `docs` 的长度。搜索内容、顺序、数量随时间变化。
 
 ```json
 {
-    "ret": 200,
-    "msg": "专辑检索结果",
-    "data": {
-        "result": {
-            "response": {
-                "docs": [
-                    {
-                        "play": 2853604,
-                        "user_source": "1",
-                        "cover_path": "//imagev2.xmcdn.com/group11/M00/6E/A2/wKgDbVXXIAuQ-laYAAIrwiJmAuw185.jpg!op_type=3&columns=290&rows=290&magick=png",
-                        "title": "你好，西藏",
-                        "uid": 20401328,
-                        "url": "/album/2888955",
-                        "pinyin": "qita",
-                        "category_id": 1006,
-                        "intro": "走进人间天堂~为你讲述阿境四次入藏的点点滴滴~第四季正在更新~~~理论更新时间：每周日晚上~",
-                        "id": 2888955,
-                        "is_paid": false,
-                        "is_finished": 1,
-                        "tags": "花样旅行,在路上,旅行者,西藏,本地听",
-                        "category_title": "生活",
-                        "isDraft": false,
-                        "created_at": 1440161954000,
-                        "type": "1",
-                        "last_uptrack_at_hour": 83095,
-                        "is_v": true,
-                        "refund_support_type": 0,
-                        "count_comment": 155,
-                        "score": 9.6,
-                        "price_type_id": 0,
-                        "updated_at": 1674520933000,
-                        "isVipFree": false,
-                        "nickname": "阿境",
-                        "custom_title": "为你讲述阿境四次入藏的点点滴滴",
-                        "verify_type": 1,
-                        "vipFreeType": 0,
-                        "serialState": 1,
-                        "price_type_enum": 0,
-                        "tracks": 36,
-                        "isNoCopyright": false,
-                        "comments_count": 0,
-                        "price_types": [],
-                        "anchorUrl": "/zhubo/20401328",
-                        "richTitle": "<span class =\"orange-1\">你好</span>，西藏",
-                        "vipType": 0
-                    },
-                    {
-                    "play": 13669548,
-                    "user_source": "1",
-                    "cover_path": "//imagev2.xmcdn.com/group82/M07/60/51/wKg5Il9eBZDz_Zs8AAGggBi7K9k542.jpg!op_type=3&columns=290&rows=290&magick=png",
-                    "title": "你好，中校先生【军婚｜现言】",
-                    "uid": 77359630,
-                    "url": "/album/40778098",
-                    "pinyin": "youshengshu",
-                    "category_id": 3,
-                    "intro": "先婚后爱，记者×中校的婚姻攻坚战。【强烈推荐】男女双洁+青春校园+甜宠爽文，欢迎入坑！重生后成了偏执反派的白月光丨校园甜宠丨穿书逆袭丨多人有声剧科幻爱情+平行时空+互相救赎，快来收听！平行人生丨科幻言情多人剧丨杨建东完美爱情小0和她的朋友们：...",
-                    "id": 40778098,
-                    "is_paid": false,
-                    "is_finished": 2,
-                    "tags": "",
-                    "category_title": "有声书",
-                    "isDraft": false,
-                    "created_at": 1597156955000,
-                    "type": "1",
-                    "last_uptrack_at_hour": 84932,
-                    "is_v": true,
-                    "refund_support_type": 0,
-                    "count_comment": 325,
-                    "score": 9.5,
-                    "price_type_id": 0,
-                    "updated_at": 1663840457000,
-                    "isVipFree": false,
-                    "nickname": "流浪的小0_仓央剧社",
-                    "custom_title": "一桩军婚外加一位高深莫测的中校先生",
-                    "verify_type": 2,
-                    "vipFreeType": 0,
-                    "serialState": 2,
-                    "price_type_enum": 0,
-                    "tracks": 111,
-                    "isNoCopyright": false,
-                    "comments_count": 0,
-                    "price_types": [],
-                    "anchorUrl": "/zhubo/77359630",
-                    "richTitle": "<span class =\"orange-1\">你好</span>，中校先生【军婚｜现言】",
-                    "vipType": 0
-                    }],
-                "numFound": 23425,
-                "totalPage": 1172,
-                "start": 0,
-                "pageSize": 20,
-                "sc": {},
-                "total": 23425
-            },
-            "responseHeader": {
-                "QTime": 170,
-                "params": {
-                    "core": "album",
-                    "defType": "edismax",
-                    "indent": "on",
-                    "qf": "category_title^100 title^80 tags^50 intro^0.001",
-                    "start": "0",
-                    "sort": "relation",
-                    "rows": "20",
-                    "wt": "json"
-                },
-                "status": 0
-            }
-        }
+  "ret": 200,
+  "msg": "专辑检索结果",
+  "data": {
+    "result": {
+      "response": {
+        "docs": [
+          {
+            "id": 9803351,
+            "title": "听学编程之Python",
+            "uid": 3990327,
+            "url": "/album/9803351",
+            "is_paid": false,
+            "tracks": 18
+          }
+        ],
+        "numFound": 1248,
+        "totalPage": 250,
+        "start": 0,
+        "pageSize": 5,
+        "currentPage": 1
+      }
     }
+  }
 }
 ```
 
+### 分页字段
 
+- `numFound` / `total`：服务端返回的匹配总数。
+- `totalPage`：服务端总页数。
+- `start`：本页起始偏移，本次 `page=2&rows=3` 返回 `start=3`。
+- `pageSize`：实际每页数量。
+- `currentPage`：实际当前页码。
 
+翻页时保持 `kw`、`core`、`rows`、排序条件不变；不同时间的相关度结果可能变化，不要把搜索结果当成固定快照。
 
+### 不同资源的字段
+
+**专辑 `album`**：
+
+- `id`：专辑 ID；`uid`：主播 ID。
+- `title`、`intro`、`nickname`：标题、简介、主播名称。
+- `url` / `anchorUrl`：网站相对路径。
+- `cover_path`：封面，可能以 `//` 开头，网页外使用时补 `https:`。
+- `tracks` / `play`：声音数量 / 播放次数。
+- `is_paid`：付费属性，不代表当前账号是否已购买。
+- `created_at` / `updated_at`：本次样本为毫秒级时间戳。
+
+**声音 `track`**：
+
+- `id`：声音 ID，不是专辑 ID；`album_id`：专辑 ID。
+- `title`、`album_title`、`duration`（秒）、`count_play`。
+- `trackUrl`、`albumUrl`、`userUrl`：对应页面路径。
+- `play_path_32`、`play_path_64`、`play_path_aacv164`、`play_path_aacv224` 可能为空，不能承诺能从搜索结果直接下载。
+
+**主播 `user`**：
+
+- `id`、`nickname` 等字段以实际响应为准，字段集合不等同于专辑或声音。
+- 主播搜索本次返回的后端排序为 `isVerified desc`，不能把专辑的 `condition` 语义直接套用。
+
+### 不应猜测的字段
+
+旧文档把 `is_finished` 固定解释为 `1=完结、0=未完结`，把 `last_uptrack_at_hour` 当标准时间戳，均不可靠。官网 Web 专辑 UI 和旧分类元数据支持 `1=连载`、`2=完本`，见[完结状态依据](Album_reviews_and_filters.md#5-旧分类元数据与完结状态)；搜索字段是另一个命名，接入时仍应确认枚举适用范围并保留未知值。`serialState`、`price_type_enum`、`vipType` 等内部枚举不要无依据转换。
+
+`richTitle` 含高亮 HTML，不是纯文本；前端应提取文本或经过安全净化，不能直接把上游 HTML 插入页面。
+
+`data.result.responseHeader.params` 是后端检索元信息，不代表其中每个参数都可作为公开请求参数传入；也可能包含用户或检索关联信息，不适合整段记录到日志。
+
+## 常见问题
+
+- HTTP 200 不等于业务成功，必须检查 `ret` 和响应结构。
+- 返回 HTML、登录页或验证码时停止，不要无限重试或尝试绕过风控。
+- 请求频率、地区和登录状态可能影响结果；工具每次只请求一页，不自动抓取全部搜索结果。
